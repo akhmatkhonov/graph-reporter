@@ -1,22 +1,22 @@
-
-create table fring_site(
+begin
+execute immediate 'create table fring_site(
     report_run_id number,
     site_id number,
     cand_id number,
     core_id number,
     constraint u1_fring_site unique (report_run_id, site_id, core_id)
-);
+)';
 
-create table fring_link(
+execute immediate 'create table fring_link(
     report_run_id number,
     link_id number,
     site_a_id number,
     site_z_id number,
     fiber_ring_id number,
     constraint u1_fring_link unique (report_run_id, link_id)
-);
+)';
 
-create table fring_data(
+execute immediate 'create table fring_data(
     report_run_id number,
     site_a_id number,
     cand_a_id number,
@@ -30,25 +30,25 @@ create table fring_data(
     link_status_id number,
     link_type_id number,
     fiber_ring_id number
-);
+)';
 
-create table cpath_legacynv_site(
+execute immediate 'create table cpath_legacynv_site(
     report_run_id number,
     site_id number,
     cand_id number,
     core_id number,
     constraint u1_cpath_legacynv_site unique (report_run_id, site_id, core_id)
-);
+)';
 
-create table cpath_legacynv_link(
+execute immediate 'create table cpath_legacynv_link(
     report_run_id number,
     link_id number,
     site_a_id number,
     site_z_id number,
     constraint u1_cpath_legacynv_link unique (report_run_id, link_id)
-);
+)';
 
-create table cpath_legacynv_data(
+execute immediate 'create table cpath_legacynv_data(
     report_run_id number,
     site_a_id number,
     cand_a_id number,
@@ -61,15 +61,15 @@ create table cpath_legacynv_data(
     link_id number,
     link_status_id number,
     link_type_id number
-);
+)';
 
-create global temporary table fring_param_site(
+execute immediate 'create global temporary table fring_param_site(
     site_id number,
     cand_id number,
     core_id number
-) on commit preserve rows;
+) on commit preserve rows';
 
-create global temporary table fring_param_data(
+execute immediate 'create global temporary table fring_param_data(
     site_a_id number,
     cand_a_id number,
     pop_type_a_id number,
@@ -82,15 +82,15 @@ create global temporary table fring_param_data(
     link_status_id number,
     link_type_id number,
     fiber_ring_id number
-) on commit preserve rows;
+) on commit preserve rows';
 
-create global temporary table cpath_legacynv_param_site(
+execute immediate 'create global temporary table cpath_legacynv_param_site(
     site_id number,
     cand_id number,
     core_id number
-) on commit preserve rows;
+) on commit preserve rows';
 
-create global temporary table cpath_legacynv_param_data(
+execute immediate 'create global temporary table cpath_legacynv_param_data(
     site_a_id number,
     cand_a_id number,
     pop_type_a_id number,
@@ -102,9 +102,9 @@ create global temporary table cpath_legacynv_param_data(
     link_id number,
     link_status_id number,
     link_type_id number
-) on commit preserve rows;
+) on commit preserve rows';
 
-create global temporary table clearpath_source_data(
+execute immediate 'create global temporary table clearpath_source_data(
     site_1 number,
     site_2 number,
     cand_1 number,
@@ -131,6 +131,8 @@ create global temporary table clearpath_source_data(
     count_link_site2 number,
     icnn_home_pop_id number,
     icnn_home_pop_key varchar2(1000)
-) on commit preserve rows;
+) on commit preserve rows';
 
-exec dbms_output.put_line('Necessary TABLES have been created');
+dbms_output.put_line('Necessary TABLES have been created');
+
+end;
