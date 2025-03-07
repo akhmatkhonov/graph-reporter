@@ -30,8 +30,6 @@ create table fring_data(
     link_status_id number,
     link_type_id number,
     fiber_ring_id number,
-    constraint fk1_fring_data foreign key (report_run_id)
-        references report_run (report_run_id) on delete cascade null
 );
 
 create table cpath_legacynv_site(
