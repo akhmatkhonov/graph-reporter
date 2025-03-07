@@ -1,3 +1,4 @@
+
 create table fring_site(
     report_run_id number,
     site_id number,
