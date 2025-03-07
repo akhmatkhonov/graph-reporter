@@ -87,7 +87,7 @@ execute immediate 'create or replace type cpath_rpt_path force as object (
 
 execute immediate 'create or replace type cpath_rpt_path_table force
 as table of cpath_rpt_path';
-/
+
 
 execute immediate 'create or replace type cpath_telco_type force as object (
   pop_site_id  number,
