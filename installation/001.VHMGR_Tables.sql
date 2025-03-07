@@ -133,4 +133,4 @@ create global temporary table clearpath_source_data(
     icnn_home_pop_key varchar2(1000)
 ) on commit preserve rows;
 
-dbms_output.put_line('Necessary TABLES have been created');
+exec dbms_output.put_line('Necessary TABLES have been created');
