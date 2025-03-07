@@ -1,4 +1,3 @@
-begin
 create table fring_site(
     report_run_id number,
     site_id number,
@@ -134,5 +133,3 @@ create global temporary table clearpath_source_data(
 ) on commit preserve rows;
 
 dbms_output.put_line('Necessary TABLES have been created');
-
-end;
