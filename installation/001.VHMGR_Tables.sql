@@ -29,7 +29,7 @@ create table fring_data(
     link_id number,
     link_status_id number,
     link_type_id number,
-    fiber_ring_id number,
+    fiber_ring_id number
 );
 
 create table cpath_legacynv_site(
