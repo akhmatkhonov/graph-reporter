@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="UTF-8"?><COMPONENTS author="graph-reporter_admin" description="" name="test.onevizion.com_BPL_02172025001442.xml" site="http&#x3a;&#x2f;&#x2f;dev2.vqs.net&#x3a;8080" ts="" ><RULES>
+ <RULES_ITEM>
+  <IS_ASYNC>0</IS_ASYNC>
+  <IS_ENABLED>1</IS_ENABLED>
+  <RULE>VHMGR: Candidate Coord Update</RULE>
+  <RULE_CLASS_ID>1</RULE_CLASS_ID>
+  <RULE_ID>10009772529</RULE_ID>
+  <RULE_TYPE>After Configured Field Update</RULE_TYPE>
+  <SQL_TEXT>declare
+    v_coord_xkey varchar2(255);
+    v_coord_xid number;
+    v_count_coord number;
+    v_bh_xkey varchar2(255);
+    v_cand_type varchar2(255);
+    v_cand_id number;
+    v_cand_lat number;
+    v_cand_long number;
+    v_bh_coord_rtid number; /*BackHaul -&gt; Coord*/
+    
+    c_bh_ttid constant number := id.backhaul.tt;
+    c_coord_ttid constant number := id.coord.tt;
+    
+    c_bh_link_id_cfid constant number := id.backhaul.cf.xitor_key;
+    c_bh_a_cand_cfid constant number := id.backhaul.cf.a_cand;
+    c_bh_z_cand_cfid constant number := id.backhaul.cf.z_cand;
+    
+    c_cand_lat_cfid constant number := id.candidate.cf.latitude;
+    c_cand_long_cfid constant number := id.candidate.cf.longitude;
+    
+    c_coord_lat_cfid constant number := id.coord.cf.co_latitude;
+    c_coord_long_cfid constant number := id.coord.cf.co_longitude;    
+begin
+
+    select relation_type_id 
+      into v_bh_coord_rtid
+      from relation_type 
+     where parent_type_id = c_bh_ttid 
+       and child_type_id = c_coord_ttid;
+    
+    v_cand_id := util.getvalnumbyid(:pk, :id_num);
+    
+    if :id_num = c_bh_a_cand_cfid then
+        v_cand_type := &apos;A&apos;;
+    else 
+        v_cand_type := &apos;Z&apos;;
+    end if;
+    
+    if v_cand_id is null then 
+        for cur_coord in (
+            select r_bh_coord.child_id as id
+            from relation r_bh_coord
+                join xitor coord on (r_bh_coord.child_id = coord.xitor_id)
+            where 
+                r_bh_coord.relation_type_id = v_bh_coord_rtid and
+                r_bh_coord.parent_id = :pk and
+                coord.xitor_key like &apos;%&apos;|| v_cand_type
+         ) loop
+            pkg_xitor.drop_xitor(cur_coord.id);
+        end loop;
+        
+        return;
+    end if;
+    
+	v_cand_lat := util.getvalnumbyid (v_cand_id, c_cand_lat_cfid);
+	v_cand_long := util.getvalnumbyid (v_cand_id, c_cand_long_cfid);
+    
+    select count(r_bh_coord.child_id)
+    into v_count_coord
+    from relation r_bh_coord
+        join xitor coord on (r_bh_coord.child_id = coord.xitor_id)
+    where 
+        r_bh_coord.relation_type_id = v_bh_coord_rtid and
+        r_bh_coord.parent_id = :pk and
+        coord.xitor_key like &apos;%&apos; || v_cand_type;
+        
+    if v_count_coord = 0 then        
+	    --v_bh_xkey := util.getvalstrbyid(:pk, c_bh_link_id_cfid); 
+		v_coord_xkey := :pk || &apos;_&apos; || v_cand_type;
+        
+		v_coord_xid := pkg_xitor.new_xitor(c_coord_ttid, v_coord_xkey, null, null, pkg_sec.get_cu(), pkg_sec.get_pid(), null);
+		pkg_relation.new_relation(:pk, v_coord_xid, v_bh_coord_rtid);
+				
+		util.setvalnumbyid(v_coord_xid, c_coord_lat_cfid, v_cand_lat);
+		util.setvalnumbyid(v_coord_xid, c_coord_long_cfid, v_cand_long);
+    else 
+        for cur_coord in (
+            select r_bh_coord.child_id as id
+            from relation r_bh_coord
+            join xitor coord on (r_bh_coord.child_id = coord.xitor_id)
+            where 
+                r_bh_coord.relation_type_id = v_bh_coord_rtid and
+                r_bh_coord.parent_id = :pk and
+                coord.xitor_key like &apos;%&apos;|| v_cand_type
+         ) loop
+            util.setvalnumbyid(cur_coord.id, c_coord_lat_cfid, v_cand_lat);
+		    util.setvalnumbyid(cur_coord.id, c_coord_long_cfid, v_cand_long);
+        end loop;
+    end if;
+end;</SQL_TEXT>
+  <WARNING_LABEL/>
+  <RULE_CLASS_PARAM_VALS/>
+  <RULE_HTTPCALLS/>
+  <RULE_HTTPCALL_PARAMS/>
+  <BPD_ITEMS>
+   <T_BPD_ITEM>
+    <ITEM_ID>1000914010240</ITEM_ID>
+    <PKEY>10009772529</PKEY>
+    <ITEM_TYPE_ID>9</ITEM_TYPE_ID>
+    <ITEM_STATUS_ID>1</ITEM_STATUS_ID>
+    <DESCRIPTION>&lt;p&gt;Add and change the Coord after selecting the Cand&lt;/p&gt;</DESCRIPTION>
+    <BLOB_DATA/>
+    <PROGRAM_ID>1000993682</PROGRAM_ID>
+    <NAME>VHMGR: Candidate Coord Update</NAME>
+    <APP_LABEL/>
+   </T_BPD_ITEM>
+  </BPD_ITEMS>
+  <RULE_GEOCODING/>
+  <RULE_MAP_SNIPPETS/>
+  <PROGRAM_ID>1000993682</PROGRAM_ID>
+  <RULE_TYPE_ID>8</RULE_TYPE_ID>
+  <RULE_TOWER_GROUPS/>
+  <COMPONENT_PACKAGES>
+   <T_BPL_COMP_PKG>
+    <COMPONENT_ID>4</COMPONENT_ID>
+    <OBJECT_ID>10009772529</OBJECT_ID>
+    <COMPONENTS_PACKAGE_ID>217536</COMPONENTS_PACKAGE_ID>
+    <NAME>VHMGR Graph Reporter</NAME>
+    <PROGRAM_ID>1000993682</PROGRAM_ID>
+    <BPD_ITEMS/>
+    <IS_LOCKED>0</IS_LOCKED>
+   </T_BPL_COMP_PKG>
+  </COMPONENT_PACKAGES>
+  <CONFIG_FIELD_IDNUMS>
+   <T_TYPE_SPECIF_OBJ_IDNUM>
+    <XITOR_TYPE>BackHaul</XITOR_TYPE>
+    <OBJECT_NAME>A_CAND</OBJECT_NAME>
+   </T_TYPE_SPECIF_OBJ_IDNUM>
+   <T_TYPE_SPECIF_OBJ_IDNUM>
+    <XITOR_TYPE>BackHaul</XITOR_TYPE>
+    <OBJECT_NAME>Z_CAND</OBJECT_NAME>
+   </T_TYPE_SPECIF_OBJ_IDNUM>
+  </CONFIG_FIELD_IDNUMS>
+  <TASK_DATE_IDNUMS/>
+  <TASK_IDNUMS/>
+  <TRACKOR_TYPE_IDNUMS/>
+  <RELATION_TYPE_IDNUMS/>
+  <WP_TEMPLATE_IDNUMS/>
+  <WF_TEMPLATE_IDNUMS/>
+  <IMPORT_IDNUMS/>
+  <REPORT_IDNUMS/>
+  <BI_TABLE_IDNUMS/>
+  <COMPONENT_LABELS/>
+ </RULES_ITEM>
+ <RULES_ITEM>
+  <IS_ASYNC>0</IS_ASYNC>
+  <IS_ENABLED>1</IS_ENABLED>
+  <RULE>VHMGR: Coord update on Cand coord update</RULE>
+  <RULE_CLASS_ID>1</RULE_CLASS_ID>
+  <RULE_ID>10009772530</RULE_ID>
+  <RULE_TYPE>After Configured Field Update</RULE_TYPE>
+  <SQL_TEXT>declare
+    v_cand_lat number;
+    v_cand_long number;
+    v_coord_field number;
+    v_coord_value number;
+    v_bh_coord_rtid number;
+
+    c_coord_ttid constant number := id.coord.tt;
+    c_bh_ttid constant number := id.backhaul.tt;
+    
+    c_bh_link_id_cfid constant number := id.backhaul.cf.xitor_key;
+    c_bh_a_cand_cfid constant number := id.backhaul.cf.a_cand;
+    c_bh_z_cand_cfid constant number := id.backhaul.cf.z_cand;
+    
+    c_cand_lat_cfid constant number := id.candidate.cf.latitude;
+    c_cand_long_cfid constant number := id.candidate.cf.longitude;
+    
+    c_coord_lat_cfid constant number := id.coord.cf.co_latitude;
+    c_coord_long_cfid constant number := id.coord.cf.co_longitude;    
+begin
+    select relation_type_id 
+      into v_bh_coord_rtid
+      from relation_type 
+     where parent_type_id = c_bh_ttid 
+       and child_type_id = c_coord_ttid;
+    
+    if :id_num = c_cand_lat_cfid then
+        v_coord_field := c_coord_lat_cfid;
+    else
+        v_coord_field := c_coord_long_cfid;
+    end if;
+    
+    v_coord_value := util.getvalnumbyid(:pk, :id_num);
+    
+    for cur_coord in (
+		select coord.xitor_id as id
+		from 
+			xitor bh
+			join config_value_number cvn on (bh.xitor_id = cvn.key_value)
+			join relation r_bh_coord on (bh.xitor_id = r_bh_coord.parent_id)
+			join xitor coord on (r_bh_coord.child_id = coord.xitor_id)
+		where 
+			bh.xitor_type_id = c_bh_ttid and
+			cvn.value_number = :pk and --id_candidate
+			r_bh_coord.relation_type_id = v_bh_coord_rtid and
+			(
+				cvn.config_field_id = c_bh_a_cand_cfid and
+				coord.xitor_key like &apos;%A&apos; or
+				cvn.config_field_id = c_bh_z_cand_cfid and
+				coord.xitor_key like &apos;%Z&apos;
+			) and
+			coord.xitor_type_id = c_coord_ttid	
+    )loop
+        util.setvalnumbyid(cur_coord.id, v_coord_field, v_coord_value);
+    end loop;
+end;</SQL_TEXT>
+  <WARNING_LABEL/>
+  <RULE_CLASS_PARAM_VALS/>
+  <RULE_HTTPCALLS/>
+  <RULE_HTTPCALL_PARAMS/>
+  <BPD_ITEMS>
+   <T_BPD_ITEM>
+    <ITEM_ID>1000914010241</ITEM_ID>
+    <PKEY>10009772530</PKEY>
+    <ITEM_TYPE_ID>9</ITEM_TYPE_ID>
+    <ITEM_STATUS_ID>1</ITEM_STATUS_ID>
+    <DESCRIPTION>&lt;p&gt;Сhange Сoord after change of the Candidate&amp;#39;s coord&lt;/p&gt;</DESCRIPTION>
+    <BLOB_DATA/>
+    <PROGRAM_ID>1000993682</PROGRAM_ID>
+    <NAME>VHMGR: Coord update on Cand coord update</NAME>
+    <APP_LABEL/>
+   </T_BPD_ITEM>
+  </BPD_ITEMS>
+  <RULE_GEOCODING/>
+  <RULE_MAP_SNIPPETS/>
+  <PROGRAM_ID>1000993682</PROGRAM_ID>
+  <RULE_TYPE_ID>8</RULE_TYPE_ID>
+  <RULE_TOWER_GROUPS/>
+  <COMPONENT_PACKAGES>
+   <T_BPL_COMP_PKG>
+    <COMPONENT_ID>4</COMPONENT_ID>
+    <OBJECT_ID>10009772530</OBJECT_ID>
+    <COMPONENTS_PACKAGE_ID>217536</COMPONENTS_PACKAGE_ID>
+    <NAME>VHMGR Graph Reporter</NAME>
+    <PROGRAM_ID>1000993682</PROGRAM_ID>
+    <BPD_ITEMS/>
+    <IS_LOCKED>0</IS_LOCKED>
+   </T_BPL_COMP_PKG>
+  </COMPONENT_PACKAGES>
+  <CONFIG_FIELD_IDNUMS>
+   <T_TYPE_SPECIF_OBJ_IDNUM>
+    <XITOR_TYPE>Candidate</XITOR_TYPE>
+    <OBJECT_NAME>LATITUDE</OBJECT_NAME>
+   </T_TYPE_SPECIF_OBJ_IDNUM>
+   <T_TYPE_SPECIF_OBJ_IDNUM>
+    <XITOR_TYPE>Candidate</XITOR_TYPE>
+    <OBJECT_NAME>LONGITUDE</OBJECT_NAME>
+   </T_TYPE_SPECIF_OBJ_IDNUM>
+  </CONFIG_FIELD_IDNUMS>
+  <TASK_DATE_IDNUMS/>
+  <TASK_IDNUMS/>
+  <TRACKOR_TYPE_IDNUMS/>
+  <RELATION_TYPE_IDNUMS/>
+  <WP_TEMPLATE_IDNUMS/>
+  <WF_TEMPLATE_IDNUMS/>
+  <IMPORT_IDNUMS/>
+  <REPORT_IDNUMS/>
+  <BI_TABLE_IDNUMS/>
+  <COMPONENT_LABELS/>
+ </RULES_ITEM>
+ <RULES_ITEM>
+  <IS_ASYNC>0</IS_ASYNC>
+  <IS_ENABLED>1</IS_ENABLED>
+  <RULE>VHMGR: Remove Coords on Cand remove</RULE>
+  <RULE_CLASS_ID>1</RULE_CLASS_ID>
+  <RULE_ID>10009772531</RULE_ID>
+  <RULE_TYPE>Before Trackor Delete</RULE_TYPE>
+  <SQL_TEXT>declare
+    c_coord_ttid constant number := id.coord.tt;
+    c_bh_ttid constant number := id.backhaul.tt;
+    
+    c_bh_a_cand_cfid constant number := id.backhaul.cf.a_cand;
+    c_bh_z_cand_cfid constant number := id.backhaul.cf.z_cand;
+begin
+    for cur_bh in (
+		select bh.xitor_id as id, cvn.config_field_id as cfid
+		from 
+			xitor bh
+			join config_value_number cvn on (bh.xitor_id = cvn.key_value)
+		where 
+			bh.xitor_type_id = c_bh_ttid and
+			cvn.value_number = :xitor_id and --id_candidate
+		    cvn.config_field_id in (c_bh_a_cand_cfid, c_bh_z_cand_cfid)
+    )loop
+        util.setvalnumbyid(cur_bh.id, cur_bh.cfid, null);
+    end loop;
+end;</SQL_TEXT>
+  <WARNING_LABEL/>
+  <RULE_CLASS_PARAM_VALS/>
+  <RULE_HTTPCALLS/>
+  <RULE_HTTPCALL_PARAMS/>
+  <BPD_ITEMS>
+   <T_BPD_ITEM>
+    <ITEM_ID>1000914010242</ITEM_ID>
+    <PKEY>10009772531</PKEY>
+    <ITEM_TYPE_ID>9</ITEM_TYPE_ID>
+    <ITEM_STATUS_ID>1</ITEM_STATUS_ID>
+    <DESCRIPTION>&lt;p&gt;Removal of Coords after removal of the Candidate&lt;/p&gt;</DESCRIPTION>
+    <BLOB_DATA/>
+    <PROGRAM_ID>1000993682</PROGRAM_ID>
+    <NAME>VHMGR: Remove Coords on Cand remove</NAME>
+    <APP_LABEL/>
+   </T_BPD_ITEM>
+  </BPD_ITEMS>
+  <RULE_GEOCODING/>
+  <RULE_MAP_SNIPPETS/>
+  <PROGRAM_ID>1000993682</PROGRAM_ID>
+  <RULE_TYPE_ID>20</RULE_TYPE_ID>
+  <RULE_TOWER_GROUPS/>
+  <COMPONENT_PACKAGES>
+   <T_BPL_COMP_PKG>
+    <COMPONENT_ID>4</COMPONENT_ID>
+    <OBJECT_ID>10009772531</OBJECT_ID>
+    <COMPONENTS_PACKAGE_ID>217536</COMPONENTS_PACKAGE_ID>
+    <NAME>VHMGR Graph Reporter</NAME>
+    <PROGRAM_ID>1000993682</PROGRAM_ID>
+    <BPD_ITEMS/>
+    <IS_LOCKED>0</IS_LOCKED>
+   </T_BPL_COMP_PKG>
+  </COMPONENT_PACKAGES>
+  <CONFIG_FIELD_IDNUMS/>
+  <TASK_DATE_IDNUMS/>
+  <TASK_IDNUMS/>
+  <TRACKOR_TYPE_IDNUMS>
+   <VARCHAR2>Candidate</VARCHAR2>
+  </TRACKOR_TYPE_IDNUMS>
+  <RELATION_TYPE_IDNUMS/>
+  <WP_TEMPLATE_IDNUMS/>
+  <WF_TEMPLATE_IDNUMS/>
+  <IMPORT_IDNUMS/>
+  <REPORT_IDNUMS/>
+  <BI_TABLE_IDNUMS/>
+  <COMPONENT_LABELS/>
+ </RULES_ITEM>
+</RULES>
+</COMPONENTS>

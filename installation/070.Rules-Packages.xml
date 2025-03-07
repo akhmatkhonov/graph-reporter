@@ -1,0 +1,1388 @@
+<?xml version="1.0" encoding="UTF-8"?><COMPONENTS author="graph-reporter_admin" description="" name="test.onevizion.com_BPL_02172025001442.xml" site="http&#x3a;&#x2f;&#x2f;dev2.vqs.net&#x3a;8080" ts="" ><DB_PACKAGES>
+ <DB_PACKAGES_ITEM>
+  <DB_PKG_NAME>PKGR_CPATH_LEGACYNV_TEST</DB_PKG_NAME>
+  <PKG_NAME>PKGR_CPATH_LEGACYNV_TEST</PKG_NAME>
+  <DB_PACKAGE_SPEC>CREATE OR REPLACE PACKAGE &quot;PKGR_CPATH_LEGACYNV_TEST&quot; as
+
+        --c_server constant varchar2(1000) := pkg_rpt.get_app_server_url;
+        c_server constant varchar2(1000) := &apos;http://dev2.vqs.net:8080&apos;;
+        
+        c_a_cand_cf constant number := id.BackHaul.cf.A_CAND;
+        c_z_cand_cf constant number := id.BackHaul.cf.z_CAND;
+        c_bh_status_cf constant number := id.BackHaul.cf.BH_STATUS;
+        c_bh_designation_cf constant number := id.BackHaul.cf.BH_DESIGNATION; 
+        c_cand_rank_cf constant number := id.Candidate.cf.CAND_RANK;
+        c_xitor_flag_cf constant number := id.Site.cf.XITOR_FLAG;
+        c_site_type_pop_cf constant number := id.Site.cf.SITE_TYPE_POP;
+        c_site_type_bh_cf constant number := id.Site.cf.SITE_TYPE_BH;
+        c_backhaul_tt constant number := id.BackHaul.tt;
+        c_site_tt constant number := id.Site.tt;
+        c_candidate_tt constant number := id.Candidate.tt;
+        c_job_tt constant number := id.Job.tt;
+
+        procedure fill_source_data(p_rep_run_id number, p_link_status_ids tableofnum, p_link_type_ids tableofnum, p_ic_desig_ids tableofnum);
+        procedure clear_source_data(p_rep_run_id number);
+        function get_admin_params_begin(p_rep_run_id number, p_link_status_ids tableofnum, p_link_type_ids tableofnum, p_ic_desig_ids tableofnum) return list_sprint_clrpath_admin pipelined;
+        function get_admin_params_end(p_rep_run_id number) return list_sprint_clrpath_admin pipelined;
+        function get_sites(p_rep_run_id number, p_pop_ids tableofnum) return list_cpath_legacynv_site pipelined;
+        function get_links(p_rep_run_id number, p_pop_ids tableofnum) return list_cpath_legacynv_link pipelined;
+        function get_augments(p_rep_run_id number, p_pop_ids tableofnum, p_aug_type_ids tableofnum) return list_cpath_legacynv_aug pipelined;
+        function add_to_tableofnum(p_table tableofnum, p_id number) return tableofnum;
+        procedure fill_source_param_data;
+        procedure fill_param_site(p_pop_ids tableofnum);
+        function get_mw_donors(p_pop_ids tableofnum) return tableofnum pipelined;
+        
+end PKGR_CPATH_LEGACYNV_TEST;</DB_PACKAGE_SPEC>
+  <DB_PACKAGE_BODY>CREATE OR REPLACE PACKAGE BODY &quot;PKGR_CPATH_LEGACYNV_TEST&quot; as
+    procedure add_site(p_rep_run_id number, p_site t_cpath_legacynv_site);
+    
+    procedure add_site(p_rep_run_id number, p_site t_cpath_legacynv_site) as
+        pragma autonomous_transaction;
+    begin
+        insert into cpath_legacynv_site (
+            report_run_id
+            ,site_id 
+            ,cand_id 
+            ,core_id
+        ) values (
+            p_rep_run_id
+            ,p_site.site_id
+            ,p_site.cand_id
+            ,p_site.core_id
+        );
+        commit;
+    exception
+        when dup_val_on_index then
+            --do not add Site which already added earlier
+            null;
+    end add_site;
+    
+    procedure add_link(p_rep_run_id number, p_link t_cpath_legacynv_link);
+    
+    procedure add_link(p_rep_run_id number, p_link t_cpath_legacynv_link) as
+        pragma autonomous_transaction;
+    begin
+        insert into cpath_legacynv_link (
+            report_run_id
+            ,link_id
+            ,site_a_id 
+            ,site_z_id
+        ) values (
+            p_rep_run_id
+            ,p_link.link_id
+            ,p_link.site_a_id
+            ,p_link.site_z_id
+        );
+        commit;
+    exception
+        when dup_val_on_index then
+            --don not add Link which already added earlier
+            null;
+    end add_link;
+    procedure fill_source_data(p_rep_run_id number, p_link_status_ids tableofnum, p_link_type_ids tableofnum, p_ic_desig_ids tableofnum) as
+        v_cnt number;
+        pragma autonomous_transaction;
+    begin
+        /*Fill table with relations*/
+        insert into cpath_legacynv_data (
+            report_run_id
+            ,site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+        ) 
+        select 
+            p_rep_run_id as report_run_id
+            ,acrel.parent_id as site_a_id
+            ,ac.value_number as cand_a_id
+            ,aspop.value_number as pop_type_a_id
+            ,asbh.value_number as bh_type_a_id
+            
+            ,zcrel.parent_id as site_z_id
+            ,zc.value_number as cand_z_id
+            ,zspop.value_number as pop_type_z_id
+            ,zsbh.value_number as bh_type_z_id
+            
+            ,ic.xitor_id as link_id
+            ,ls.value_number as link_status_id
+            ,ic.xitor_class_id as link_type_id
+        from 
+            xitor ic 
+			join v_xitor_class on (v_xitor_class.xitor_type_id = ic.xitor_type_id)
+			
+            join config_value_number ls on (ls.key_value = ic.xitor_id and ls.config_field_id = c_bh_status_cf /*BH_STATUS - BackHaul*/)
+			join attrib_v_table_value ls_value on (ls_value.attrib_v_table_value_id = ls.value_number) 
+			
+            left outer join config_value_number desig on (desig.key_value = ic.xitor_id and desig.config_field_id = c_bh_designation_cf /*BH_DESIGNATION - BackHaul*/)
+            join config_value_number ac on (ac.key_value = ic.xitor_id and ac.config_field_id = c_a_cand_cf /*A-CAND Repl*/)
+            join config_value_number acprim on (acprim.key_value = ac.value_number and acprim.config_field_id = c_cand_rank_cf/*CAND_RANK - Candidate*/)
+			join attrib_v_table_value a_cand_rank_value on (a_cand_rank_value.attrib_v_table_value_id = acprim.value_number) 
+            
+			join relation_type rt_site_cand on (rt_site_cand.child_type_id = c_candidate_tt and rt_site_cand.parent_type_id = c_site_tt) /*Site-&gt;Cand*/
+            join relation acrel on (acrel.child_id = ac.value_number and acrel.relation_type_id = rt_site_cand.relation_type_id /*Site-&gt;Cand Repl*/)
+            
+            join config_value_number asstatus on (asstatus.key_value = acrel.parent_id and asstatus.config_field_id = c_xitor_flag_cf /*XITOR_FLAG - Site*/)
+			join attrib_v_table_value a_status_value on (a_status_value.attrib_v_table_value_id = asstatus.value_number) 
+			
+            join config_value_number aspop on (aspop.key_value = acrel.parent_id and aspop.config_field_id = c_site_type_pop_cf /*SITE_TYPE_POP - Site*/)
+			join attrib_v_table_value a_type_pop_value on (a_type_pop_value.attrib_v_table_value_id = aspop.value_number)			
+			
+            join config_value_number asbh on (asbh.key_value = acrel.parent_id and asbh.config_field_id = c_site_type_bh_cf /*SITE_TYPE_BH - Site*/)
+			join attrib_v_table_value a_type_bh_value on (a_type_bh_value.attrib_v_table_value_id = asbh.value_number)			
+			
+            join config_value_number zc on (zc.key_value = ic.xitor_id and zc.config_field_id = c_z_cand_cf /*Z-CAND Repl*/)
+            join config_value_number zcprim on (zcprim.key_value = zc.value_number and zcprim.config_field_id = c_cand_rank_cf /*CAND_RANK - Candidate*/)
+			join attrib_v_table_value z_cand_rank_value on (z_cand_rank_value.attrib_v_table_value_id = zcprim.value_number) 
+            
+            join relation zcrel on (zcrel.child_id = zc.value_number and zcrel.relation_type_id = rt_site_cand.relation_type_id /*Site-&gt;Cand*/)
+            
+            join config_value_number zsstatus on (zsstatus.key_value = zcrel.parent_id and zsstatus.config_field_id = c_xitor_flag_cf /*XITOR_FLAG - Site*/)
+			join attrib_v_table_value z_status_value on (z_status_value.attrib_v_table_value_id = zsstatus.value_number) 
+			
+            join config_value_number zspop on (zspop.key_value = zcrel.parent_id and zspop.config_field_id = c_site_type_pop_cf /*SITE_TYPE_POP - Site*/)
+			join attrib_v_table_value z_type_pop_value on (z_type_pop_value.attrib_v_table_value_id = zspop.value_number)			
+			
+            join config_value_number zsbh on (zsbh.key_value = zcrel.parent_id and zsbh.config_field_id = c_site_type_bh_cf /*SITE_TYPE_BH - Site*/)
+			join attrib_v_table_value z_type_bh_value on (z_type_bh_value.attrib_v_table_value_id = zsbh.value_number)			
+        where
+            ic.xitor_type_id = c_backhaul_tt /*BackHaul*/
+            and v_xitor_class.class_name in (&apos;Telco&apos;,&apos;MW-Licensed&apos;,&apos;MW-Unlicensed&apos;,&apos;ClearPath&apos;,&apos;Fiber Link&apos;,&apos;Leased Ethernet&apos;)
+			
+            and ls_value.value in (&apos;Build&apos;, &apos;On-Air&apos;, &apos;Plan&apos;, &apos;On-Air Backup&apos;, &apos;Temp Off-Line&apos;, &apos;On-Hold&apos;) 
+			
+            and a_cand_rank_value.value in (&apos;Primary&apos;) 
+			and z_cand_rank_value.value in (&apos;Primary&apos;)    
+			
+			and a_status_value.value &lt;&gt; (&apos;Cancelled&apos;) 
+			and z_status_value.value &lt;&gt; (&apos;Cancelled&apos;) 
+			
+			and a_type_pop_value.value in (&apos;MSC&apos;, &apos;No POP&apos;, &apos;CORE&apos;) 
+			and z_type_pop_value.value in (&apos;MSC&apos;, &apos;No POP&apos;, &apos;CORE&apos;) 
+			
+			and a_type_bh_value.value in (&apos;Transport Ring&apos;, &apos;MW Donor&apos;, &apos;Spur Site&apos;, &apos;DF Transport Site&apos;, &apos;DF MW Donor&apos;, &apos;LIT MW Donor&apos;, &apos;LIT Transport Site&apos;, &apos;MW Necklace&apos;, &apos;No Backhaul&apos;) 
+			and z_type_bh_value.value in (&apos;Transport Ring&apos;, &apos;MW Donor&apos;, &apos;Spur Site&apos;, &apos;DF Transport Site&apos;, &apos;DF MW Donor&apos;, &apos;LIT MW Donor&apos;, &apos;LIT Transport Site&apos;, &apos;MW Necklace&apos;, &apos;No Backhaul&apos;) 
+            
+			and not (a_type_pop_value.value in (&apos;MSC&apos;, &apos;CORE&apos;) and z_type_pop_value.value in (&apos;MSC&apos;, &apos;CORE&apos;))
+            and ac.value_number &lt;&gt; zc.value_number
+            and (
+                (select count(column_value) from table(p_link_status_ids) where column_value is not null) = 0
+                or 
+                ((select count(column_value) from table(p_link_status_ids) where column_value is not null) &gt;= 1 and ls.value_number in (select column_value from table(p_link_status_ids)))
+            )
+            and (
+                (select count(column_value) from table(p_link_type_ids) where column_value is not null) = 0
+                or 
+                ((select count(column_value) from table(p_link_type_ids) where column_value is not null) &gt;= 1 and ic.xitor_class_id in (select column_value from table(p_link_type_ids)))
+            )
+            and (
+                (select count(column_value) from table(p_ic_desig_ids) where column_value is not null) = 0
+                or 
+                ((select count(column_value) from table(p_ic_desig_ids) where column_value is not null) &gt;= 1 
+                 and (desig.value_number in (select column_value from table(p_ic_desig_ids)) or desig.value_number is null))
+            );
+        /*Duplicate relations but transpose SiteA and SiteZ columns*/
+        insert into cpath_legacynv_data (
+            report_run_id
+            ,site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+        ) select 
+            report_run_id
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+        from cpath_legacynv_data
+        where report_run_id = p_rep_run_id;
+        commit;
+        
+        select count(report_run_id) into v_cnt
+        from cpath_legacynv_data where report_run_id = p_rep_run_id;
+        
+        if v_cnt = 0 then
+            util.RaiseError(&apos;There is no source data for report&apos;);
+        end if;
+        
+    end fill_source_data;
+    procedure clear_source_data(p_rep_run_id number) as
+        pragma autonomous_transaction;
+    begin
+        delete from cpath_legacynv_data where report_run_id = p_rep_run_id;
+        delete from cpath_legacynv_site where report_run_id = p_rep_run_id;
+        delete from cpath_legacynv_link where report_run_id = p_rep_run_id;
+        commit;
+    end clear_source_data;
+    
+    function get_admin_params_begin(p_rep_run_id number, p_link_status_ids tableofnum, p_link_type_ids tableofnum, p_ic_desig_ids tableofnum) return list_sprint_clrpath_admin pipelined as
+    begin
+        fill_source_data(p_rep_run_id, p_link_status_ids, p_link_type_ids, p_ic_desig_ids);
+        pipe row (new t_sprint_clrpath_admin(
+            &apos;FILL_SOURCE_DATA&apos;,
+            &apos;FILL_SOURCE_DATA&apos;
+        ));
+    end get_admin_params_begin;
+    function get_admin_params_end(p_rep_run_id number) return list_sprint_clrpath_admin pipelined as
+    begin
+        clear_source_data(p_rep_run_id);
+        pipe row (new t_sprint_clrpath_admin(
+            &apos;CREATION_DATE&apos;,
+            to_char(sysdate,&apos;MM/DD/YYYY&apos;)
+        ));
+        pipe row (new t_sprint_clrpath_admin(
+            &apos;SERVER&apos;,
+            c_server
+        ));
+    end get_admin_params_end;
+    
+    function get_sites(p_rep_run_id number, p_pop_ids tableofnum) return list_cpath_legacynv_site pipelined as
+        v_cur_site number;
+        v_cur_site_stack tableofnum := new tableofnum();
+        v_glob_site_stack tableofnum := new tableofnum(); 
+        v_glob_site_lvl_stack tableofnum := new tableofnum();
+        v_count number;
+        v_site t_cpath_legacynv_site;
+        v_cand_id number;
+    begin
+        select count(report_run_id) into v_count
+        from cpath_legacynv_site where report_run_id = p_rep_run_id;
+        
+        if v_count = 0 then
+            for rec in (
+                select distinct p.column_value as pop_site_id, d.cand_a_id 
+                from table(p_pop_ids) p 
+                    join cpath_legacynv_data d on (d.site_a_id = p.column_value) 
+                where d.report_run_id = p_rep_run_id
+            ) loop
+                begin
+                    select count(site_id) into v_count
+                    from cpath_legacynv_site where core_id = rec.pop_site_id and report_run_id = p_rep_run_id;
+                exception
+                    when no_data_found then
+                        v_count := 0;
+                end;
+                if v_count = 0 then
+                    v_site := new t_cpath_legacynv_site(
+                        rec.pop_site_id,
+                        rec.cand_a_id,
+                        rec.pop_site_id
+                    );
+                    add_site(p_rep_run_id, v_site);
+                end if;
+                v_cur_site := rec.pop_site_id;
+    
+                while v_cur_site is not null
+                loop
+                    select ref_site bulk collect into v_cur_site_stack
+                    from (
+                        select distinct site_z_id as ref_site 
+						from cpath_legacynv_data t 
+						join attrib_v_table_value type_pop_value on (type_pop_value.attrib_v_table_value_id = t.pop_type_a_id) 	
+                        where 
+                            t.report_run_id = p_rep_run_id 
+                            and t.site_a_id = v_cur_site 
+                            and ((type_pop_value.value &lt;&gt; &apos;No POP&apos; and t.site_a_id = rec.pop_site_id) or (type_pop_value.value = &apos;No POP&apos; ))
+                            and t.site_z_id not in (select site_id from cpath_legacynv_site where report_run_id = p_rep_run_id and core_id = rec.pop_site_id)
+                    );
+                    if v_cur_site_stack.count &gt; 0 then
+                        for idx in v_cur_site_stack.first..v_cur_site_stack.last
+                        loop
+                            select cand_a_id into v_cand_id 
+                            from cpath_legacynv_data 
+                            where report_run_id = p_rep_run_id and site_a_id = v_cur_site_stack(idx) and rownum = 1;
+                            
+                            v_site := new t_cpath_legacynv_site(
+                                v_cur_site_stack(idx),
+                                v_cand_id,
+                                rec.pop_site_id
+                            );
+                            add_site(p_rep_run_id, v_site);
+                            v_glob_site_stack.extend;
+                            v_glob_site_stack(v_glob_site_stack.last) := v_cur_site_stack(idx);
+                        end loop;
+                    end if;
+        
+                    if v_glob_site_stack.count &gt; 0 then
+                        v_cur_site := v_glob_site_stack(v_glob_site_stack.first);
+                        v_glob_site_stack.delete(v_glob_site_stack.first);
+                    else 
+                        v_cur_site := null;
+                    end if;
+                end loop;
+            end loop;
+        end if;
+        for rec in (select site_id, cand_id, core_id from cpath_legacynv_site where report_run_id = p_rep_run_id)
+        loop
+             pipe row (new t_cpath_legacynv_site(
+                rec.site_id,
+                rec.cand_id,
+                rec.core_id
+            ));
+        end loop;
+    end get_sites;
+    function get_links(p_rep_run_id number, p_pop_ids tableofnum) return list_cpath_legacynv_link pipelined as
+        v_cnt number;
+        v_link t_cpath_legacynv_link;
+    begin
+        select count(link_id) into v_cnt
+        from cpath_legacynv_link where report_run_id = p_rep_run_id;
+        if v_cnt &gt; 0 then
+            for rec in (select link_id, site_a_id, site_z_id from cpath_legacynv_link where report_run_id = p_rep_run_id)
+            loop
+                 pipe row (new t_cpath_legacynv_link(
+                    rec.link_id,
+                    rec.site_a_id,
+                    rec.site_z_id
+                ));
+            end loop;
+        else 
+            select count(report_run_id) into v_cnt
+            from cpath_legacynv_data where report_run_id = p_rep_run_id;
+    
+            if v_cnt = 0 then
+                clear_source_data(p_rep_run_id);
+                util.RaiseError(&apos;There is no source data for report&apos;);
+            end if;
+            for rec in (
+                select
+                    d.link_id
+                    ,d.site_a_id
+                    ,d.site_z_id
+                from
+                    (select * from (select z.*, row_number() over (partition by link_id order by link_id) as rn from cpath_legacynv_data z where z.report_run_id = p_rep_run_id) where rn = 1) d 
+                    join cpath_legacynv_site ap on (ap.site_id = d.site_a_id)
+                    join cpath_legacynv_site zp on (zp.site_id = d.site_z_id)
+                    join config_value_number ac on (ac.key_value = d.link_id and ac.config_field_id = c_a_cand_cf /*A-CAND Repl*/)
+					join relation_type rt_site_cand on (rt_site_cand.child_type_id = c_candidate_tt and rt_site_cand.parent_type_id = c_site_tt) /*Site-&gt;Cand*/
+                    join relation acrel on (acrel.child_id = ac.value_number and acrel.relation_type_id = rt_site_cand.relation_type_id /*Site-&gt;Cand*/)
+                    join config_value_number zc on (zc.key_value = d.link_id and zc.config_field_id = c_z_cand_cf /*Z-CAND Repl*/)
+                    join relation zcrel on (zcrel.child_id = zc.value_number and zcrel.relation_type_id = rt_site_cand.relation_type_id /*Site-&gt;Cand*/)
+                where 
+                    ap.report_run_id = d.report_run_id
+                    and ap.report_run_id = p_rep_run_id
+                    and d.report_run_id = p_rep_run_id
+                    and zp.report_run_id = p_rep_run_id
+                    and ap.site_id &lt;&gt; zp.site_id
+                    and not exists (select link_id from cpath_legacynv_link where report_run_id = p_rep_run_id and link_id = d.link_id)
+            ) loop
+                v_link := new t_cpath_legacynv_link(
+                    rec.link_id,
+                    rec.site_a_id,
+                    rec.site_z_id
+                );
+                add_link(p_rep_run_id, v_link);
+                pipe row (v_link);
+            end loop;
+        end if;
+    end get_links;
+    
+    function add_to_tableofnum(p_table tableofnum, p_id number) 
+    return tableofnum as
+        v_new_list tableofnum;
+    begin
+        if p_table is null then
+            return new tableofnum();
+        end if;
+        select * bulk collect into v_new_list from table(p_table);
+        v_new_list.extend;
+        v_new_list(v_new_list.last) := p_id;
+        return v_new_list;
+    end add_to_tableofnum;
+    procedure fill_source_param_data as
+        pragma autonomous_transaction;
+    begin
+        delete from cpath_legacynv_param_data;
+        --==    FILL TABLE WITH SOURCE DATA    ==--
+        insert into cpath_legacynv_param_data (
+            site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+        ) 
+        select 
+            acrel.parent_id as site_a_id
+            ,ac.value_number as cand_a_id
+            ,aspop.value_number as pop_type_a_id
+            ,asbh.value_number as bh_type_a_id
+            
+            ,zcrel.parent_id as site_z_id
+            ,zc.value_number as cand_z_id
+            ,zspop.value_number as pop_type_z_id
+            ,zsbh.value_number as bh_type_z_id
+            
+            ,ic.xitor_id as link_id
+            ,ls.value_number as link_status_id
+            ,ic.xitor_class_id as link_type_id
+        from 
+            xitor ic
+			join v_xitor_class on (v_xitor_class.xitor_type_id = ic.xitor_type_id)
+            join config_value_number ls on (ls.key_value = ic.xitor_id and ls.config_field_id = c_bh_status_cf /*BH_STATUS - BackHaul*/)
+			join attrib_v_table_value ls_value on (ls_value.attrib_v_table_value_id = ls.value_number) 
+			
+            join config_value_number ac on (ac.key_value = ic.xitor_id and ac.config_field_id = c_a_cand_cf /*A-CAND Repl*/)
+            join config_value_number acprim on (acprim.key_value = ac.value_number and acprim.config_field_id = c_cand_rank_cf /*CAND_RANK - Candidate*/)
+			join attrib_v_table_value a_cand_rank_value on (a_cand_rank_value.attrib_v_table_value_id = acprim.value_number) 
+			
+			join relation_type rt_site_cand on (rt_site_cand.child_type_id = c_candidate_tt and rt_site_cand.parent_type_id = c_site_tt) /*Site-&gt;Cand Rel Type*/
+            join relation acrel on (acrel.child_id = ac.value_number and acrel.relation_type_id = rt_site_cand.relation_type_id /*Site-&gt;Cand*/)
+            join config_value_number asstatus on (asstatus.key_value = acrel.parent_id and asstatus.config_field_id = c_xitor_flag_cf /*XITOR_FLAG - Site*/)
+			join attrib_v_table_value a_status_value on (a_status_value.attrib_v_table_value_id = asstatus.value_number) 
+			
+            join config_value_number aspop on (aspop.key_value = acrel.parent_id and aspop.config_field_id = c_site_type_pop_cf /*SITE_TYPE_POP - Site*/)
+			join attrib_v_table_value a_type_pop_value on (a_type_pop_value.attrib_v_table_value_id = aspop.value_number)			
+			
+            join config_value_number asbh on (asbh.key_value = acrel.parent_id and asbh.config_field_id = c_site_type_bh_cf /*SITE_TYPE_BH - Site*/)
+			join attrib_v_table_value a_type_bh_value on (a_type_bh_value.attrib_v_table_value_id = asbh.value_number)			
+			
+            join config_value_number zc on (zc.key_value = ic.xitor_id and zc.config_field_id = c_z_cand_cf /*Z-CAND Repl*/)
+            join config_value_number zcprim on (zcprim.key_value = zc.value_number and zcprim.config_field_id = c_cand_rank_cf /*CAND_RANK - Candidate*/)
+			join attrib_v_table_value z_cand_rank_value on (z_cand_rank_value.attrib_v_table_value_id = zcprim.value_number) 
+			
+            join relation zcrel on (zcrel.child_id = zc.value_number and zcrel.relation_type_id = rt_site_cand.relation_type_id /*Site-&gt;Cand*/)
+            join config_value_number zsstatus on (zsstatus.key_value = zcrel.parent_id and zsstatus.config_field_id = c_xitor_flag_cf /*XITOR_FLAG - Site*/)
+			join attrib_v_table_value z_status_value on (z_status_value.attrib_v_table_value_id = zsstatus.value_number) 
+			
+            join config_value_number zspop on (zspop.key_value = zcrel.parent_id and zspop.config_field_id = c_site_type_pop_cf /*SITE_TYPE_POP - Site*/)
+			join attrib_v_table_value z_type_pop_value on (z_type_pop_value.attrib_v_table_value_id = zspop.value_number)			
+			
+            join config_value_number zsbh on (zsbh.key_value = zcrel.parent_id and zsbh.config_field_id = c_site_type_bh_cf /*SITE_TYPE_BH - Site*/)
+			join attrib_v_table_value z_type_bh_value on (z_type_bh_value.attrib_v_table_value_id = zsbh.value_number)			
+        where
+            ic.xitor_type_id = c_backhaul_tt /*BackHaul*/ 
+			and v_xitor_class.class_name in (&apos;Telco&apos;,&apos;MW-Licensed&apos;,&apos;MW-Unlicensed&apos;,&apos;ClearPath&apos;,&apos;Fiber Link&apos;,&apos;Leased Ethernet&apos;)
+            
+            and ls_value.value in (&apos;Build&apos;, &apos;On-Air&apos;, &apos;Plan&apos;, &apos;On-Air Backup&apos;, &apos;Temp Off-Line&apos;, &apos;On-Hold&apos;) 
+			
+            and a_cand_rank_value.value in (&apos;Primary&apos;) 
+			and z_cand_rank_value.value in (&apos;Primary&apos;)
+			
+			and a_status_value.value &lt;&gt; (&apos;Cancelled&apos;) 
+			and z_status_value.value &lt;&gt; (&apos;Cancelled&apos;) 
+			
+			and a_type_pop_value.value in (&apos;MSC&apos;, &apos;No POP&apos;, &apos;CORE&apos;) 
+			and z_type_pop_value.value in (&apos;MSC&apos;, &apos;No POP&apos;, &apos;CORE&apos;) 
+			
+			and a_type_bh_value.value in (&apos;Transport Ring&apos;, &apos;MW Donor&apos;, &apos;Spur Site&apos;, &apos;DF Transport Site&apos;, &apos;DF MW Donor&apos;, &apos;LIT MW Donor&apos;, &apos;LIT Transport Site&apos;, &apos;MW Necklace&apos;, &apos;No Backhaul&apos;) 
+			and z_type_bh_value.value in (&apos;Transport Ring&apos;, &apos;MW Donor&apos;, &apos;Spur Site&apos;, &apos;DF Transport Site&apos;, &apos;DF MW Donor&apos;, &apos;LIT MW Donor&apos;, &apos;LIT Transport Site&apos;, &apos;MW Necklace&apos;, &apos;No Backhaul&apos;) 
+			
+			and not (a_type_pop_value.value in (&apos;MSC&apos;, &apos;CORE&apos;) and z_type_pop_value.value in (&apos;MSC&apos;, &apos;CORE&apos;))
+			
+            and ac.value_number &lt;&gt; zc.value_number;
+        
+        insert into cpath_legacynv_param_data (
+            site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+        ) select 
+            site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+        from cpath_legacynv_param_data;
+        commit;
+    end fill_source_param_data;
+    procedure fill_param_site(p_pop_ids tableofnum) as
+        v_cur_site number;
+        v_cur_site_stack tableofnum := new tableofnum();
+        v_glob_site_stack tableofnum := new tableofnum(); 
+        v_glob_site_lvl_stack tableofnum := new tableofnum();
+        v_count number;
+        v_site t_cpath_legacynv_site;
+        v_cand_id number;
+        pragma autonomous_transaction;
+    begin
+        delete from cpath_legacynv_param_site;
+        --==    GET ALL SITES CONNECTED TO SELECTED MSC/COREs    ==--
+        for rec in (select distinct p.column_value as pop_site_id, d.cand_a_id from table(p_pop_ids) p join cpath_legacynv_param_data d on (d.site_a_id = p.column_value))
+        loop
+            v_cur_site := rec.pop_site_id;
+            while v_cur_site is not null
+            loop
+                select ref_site bulk collect into v_cur_site_stack
+                from (
+                    select distinct site_z_id as ref_site from cpath_legacynv_param_data 
+                    where 
+                        site_a_id = v_cur_site 
+                        and site_z_id not in (select site_id from cpath_legacynv_param_site)
+                );
+                if v_cur_site_stack.count &gt; 0 then
+                    for idx in v_cur_site_stack.first..v_cur_site_stack.last
+                    loop
+                        select cand_a_id into v_cand_id 
+                        from cpath_legacynv_param_data 
+                        where site_a_id = v_cur_site_stack(idx) and rownum = 1;
+                        insert into cpath_legacynv_param_site (
+                            site_id 
+                            ,cand_id 
+                            ,core_id
+                        ) values (
+                            v_cur_site_stack(idx)
+                            ,v_cand_id
+                            ,rec.pop_site_id
+                        );
+                        v_glob_site_stack.extend;
+                        v_glob_site_stack(v_glob_site_stack.last) := v_cur_site_stack(idx);
+                    end loop;
+                end if;
+    
+                if v_glob_site_stack.count &gt; 0 then
+                    v_cur_site := v_glob_site_stack(v_glob_site_stack.first);
+                    v_glob_site_stack.delete(v_glob_site_stack.first);
+                else 
+                    v_cur_site := null;
+                end if;
+            end loop;
+        end loop;
+        commit;
+    end fill_param_site;
+    function get_augments(p_rep_run_id number, p_pop_ids tableofnum, p_aug_type_ids tableofnum) return list_cpath_legacynv_aug pipelined as
+    begin
+        for rec in (
+            select
+                s.core_id as root_id
+                ,s.site_id
+                ,aug.xitor_id as augment_id
+            from 
+                (
+                    select site_id, cand_id, core_id from table(get_sites(p_rep_run_id, p_pop_ids))
+                ) s
+                join relation_type rt on (rt.child_type_id = c_job_tt and rt.parent_type_id = c_candidate_tt) 
+				join relation ca on (ca.parent_id = s.cand_id)
+                join xitor aug on (aug.xitor_id = ca.child_id)
+				join v_xitor_class on (v_xitor_class.xitor_type_id = aug.xitor_type_id)
+            where
+                ca.relation_type_id = rt.relation_type_id /*Candidate --&gt; Job Repl*/ 
+                and (
+                    (
+                        (select count(column_value) from table(p_aug_type_ids) where column_value is not null) = 0 
+                        /* MW-* Trackor Classes (By Default) Repl*/
+						and v_xitor_class.class_name in (&apos;MW Antenna Change-WM&apos;, &apos;MW T-1 Mitigation&apos;, &apos;MW T-1 Mitigation-WM&apos;, &apos;MW-Antenna Change&apos;, &apos;MW-Audit Only&apos;, &apos;MW-Backhaul Sharing&apos;, &apos;MW-Bandwidth Utilization&apos;, &apos;MW-License Key Upgrade&apos;, &apos;MW-License Key Upgrade-WM&apos;, &apos;MW-Link Change&apos;, &apos;MW-Link Change-WM&apos;, &apos;MW-LOS Survey&apos;, &apos;MW-Modem Change&apos;, &apos;MW-Modem Change-WM&apos;, &apos;MW-New Link&apos;, &apos;MW-New Link-MVNO&apos;, &apos;MW-New Link-WM&apos;, &apos;MW-PCN License Change&apos;, &apos;MW-Radio Change&apos;, &apos;MW-RBH Demarcation&apos;, &apos;MW-Radio Change-WM&apos;, &apos;MW-Sweepback&apos;, &apos;MW-Traffic Rebalancing&apos;, &apos;MW-Transport Upgrade&apos;) 
+                    )
+                    or 
+                    (
+                        (select count(column_value) from table(p_aug_type_ids) where column_value is not null) &gt; 0 
+                        and aug.xitor_class_id in (select column_value from table(p_aug_type_ids))
+                    )
+                )
+        ) loop
+            pipe row (new t_cpath_legacynv_aug(rec.root_id, rec.site_id, rec.augment_id));
+        end loop;
+    end get_augments;
+    
+    function get_mw_donors(p_pop_ids tableofnum) 
+    return tableofnum pipelined as
+    begin
+        fill_source_param_data;
+        fill_param_site(p_pop_ids);
+        --==    GET ALL FIBER RINGS    ==--
+        for rec in (
+            select distinct
+                site_z_id as site_id
+            from 
+                cpath_legacynv_param_data t 
+				join attrib_v_table_value a_type_pop_value on (a_type_pop_value.attrib_v_table_value_id = t.pop_type_a_id) 
+				join attrib_v_table_value z_type_pop_value on (z_type_pop_value.attrib_v_table_value_id = t.pop_type_z_id) 
+				join attrib_v_table_value z_type_bh_value on (z_type_bh_value.attrib_v_table_value_id = t.bh_type_z_id) 
+            where 
+				a_type_pop_value.value = &apos;MSC&apos; 
+				and z_type_pop_value.value = &apos;No POP&apos; 
+				and z_type_bh_value.value = &apos;MW Donor&apos;
+                and t.site_a_id in (select column_value from table(p_pop_ids))
+        ) loop
+            pipe row (rec.site_id);
+        end loop;
+    end get_mw_donors;
+end PKGR_CPATH_LEGACYNV_TEST;</DB_PACKAGE_BODY>
+  <DB_PACKAGE_ID>10075379</DB_PACKAGE_ID>
+  <PROGRAM_ID>1000993682</PROGRAM_ID>
+  <BPD_ITEMS/>
+  <COMPONENT_PACKAGES>
+   <T_BPL_COMP_PKG>
+    <COMPONENT_ID>27</COMPONENT_ID>
+    <OBJECT_ID>10075379</OBJECT_ID>
+    <COMPONENTS_PACKAGE_ID>217536</COMPONENTS_PACKAGE_ID>
+    <NAME>VHMGR Graph Reporter</NAME>
+    <PROGRAM_ID>1000993682</PROGRAM_ID>
+    <BPD_ITEMS/>
+    <IS_LOCKED>0</IS_LOCKED>
+   </T_BPL_COMP_PKG>
+  </COMPONENT_PACKAGES>
+  <COMPONENT_LABELS/>
+ </DB_PACKAGES_ITEM>
+ <DB_PACKAGES_ITEM>
+  <DB_PKG_NAME>PKGR_FIBER_RING_TEST</DB_PKG_NAME>
+  <PKG_NAME>PKGR_FIBER_RING_TEST</PKG_NAME>
+  <DB_PACKAGE_SPEC>CREATE OR REPLACE PACKAGE &quot;PKGR_FIBER_RING_TEST&quot; as 
+
+    --c_server constant varchar2(1000) := pkg_rpt.get_app_server_url;
+    c_server constant varchar2(1000) := &apos;http://dev2.vqs.net:8080&apos;;
+    
+    c_a_cand_cf constant number := id.BackHaul.cf.A_CAND;
+    c_z_cand_cf constant number := id.BackHaul.cf.z_CAND;
+    c_bh_status_cf constant number := id.BackHaul.cf.BH_STATUS;
+    c_bh_designation_cf constant number := id.BackHaul.cf.BH_DESIGNATION; 
+    c_cand_rank_cf constant number := id.Candidate.cf.CAND_RANK;
+    c_xitor_flag_cf constant number := id.Site.cf.XITOR_FLAG;
+    c_site_type_pop_cf constant number := id.Site.cf.SITE_TYPE_POP;
+    c_site_type_bh_cf constant number := id.Site.cf.SITE_TYPE_BH;
+    c_fiberring_tt constant number := id.FIBER_RING.tt;
+    c_backhaul_tt constant number := id.BackHaul.tt;
+    c_site_tt constant number := id.Site.tt;
+    c_candidate_tt constant number := id.Candidate.tt;
+    c_job_tt constant number := id.Job.tt;
+    
+    procedure fill_source_data(p_rep_run_id number, p_fiber_ring_ids tableofnum, p_link_status_ids tableofnum, p_link_type_ids tableofnum, p_ic_desig_ids tableofnum);
+    
+    procedure clear_source_data(p_rep_run_id number);
+    function get_admin_params_begin(p_rep_run_id number, p_fiber_ring_ids tableofnum, p_link_status_ids tableofnum, p_link_type_ids tableofnum, p_ic_desig_ids tableofnum) return list_sprint_clrpath_admin pipelined;
+    
+    function get_admin_params_end(p_rep_run_id number) return list_sprint_clrpath_admin pipelined;
+    function get_sites2(p_rep_run_id number, p_pop_ids tableofnum) return list_fring_site pipelined;
+    
+    function get_links(p_rep_run_id number, p_pop_ids tableofnum) return list_fring_link pipelined;
+    
+    function get_augments(p_rep_run_id number, p_pop_ids tableofnum, p_aug_type_ids tableofnum) return list_fring_aug pipelined;
+    function add_to_tableofnum(p_table tableofnum, p_id number) return tableofnum;
+    
+    procedure fill_source_param_data;
+    
+    procedure fill_param_site(p_pop_ids tableofnum);
+    
+    function get_fiber_rings(p_pop_ids tableofnum) return tableofnum pipelined;
+ 
+end pkgr_fiber_ring_test;</DB_PACKAGE_SPEC>
+  <DB_PACKAGE_BODY>CREATE OR REPLACE PACKAGE BODY &quot;PKGR_FIBER_RING_TEST&quot; as 
+    procedure add_site(p_rep_run_id number, p_fring_site t_fring_site);
+    
+    procedure add_site(p_rep_run_id number, p_fring_site t_fring_site) as
+        pragma autonomous_transaction;
+    begin
+        insert into fring_site (
+            report_run_id
+            ,site_id 
+            ,cand_id 
+            ,core_id
+        ) values (
+            p_rep_run_id
+            ,p_fring_site.site_id
+            ,p_fring_site.cand_id
+            ,p_fring_site.core_id
+        );
+        commit;
+    exception
+        when dup_val_on_index then
+            --do not add Site which already added earlier
+            null;
+    end add_site;
+    
+    procedure add_link(p_rep_run_id number, p_fring_link t_fring_link);
+    
+    procedure add_link(p_rep_run_id number, p_fring_link t_fring_link) as
+        pragma autonomous_transaction;
+    begin
+        insert into fring_link (
+            report_run_id
+            ,link_id
+            ,site_a_id 
+            ,site_z_id 
+            ,fiber_ring_id
+        ) values (
+            p_rep_run_id
+            ,p_fring_link.link_id
+            ,p_fring_link.site_a_id
+            ,p_fring_link.site_z_id
+            ,p_fring_link.fiber_ring_id
+        );
+        commit;
+    exception
+        when dup_val_on_index then
+            --don not add Link which already added earlier
+            null;
+    end add_link;
+    procedure fill_source_data(p_rep_run_id number, p_fiber_ring_ids tableofnum, p_link_status_ids tableofnum, p_link_type_ids tableofnum, p_ic_desig_ids tableofnum) as
+        v_cnt number;
+        pragma autonomous_transaction;
+    begin
+        /*Fill table with relations*/
+        insert into fring_data (
+            report_run_id
+            ,site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+            ,fiber_ring_id
+        ) 
+        select 
+            p_rep_run_id as report_run_id
+            ,acrel.parent_id as site_a_id
+            ,ac.value_number as cand_a_id
+            ,aspop.value_number as pop_type_a_id
+            ,asbh.value_number as bh_type_a_id
+            
+            ,zcrel.parent_id as site_z_id
+            ,zc.value_number as cand_z_id
+            ,zspop.value_number as pop_type_z_id
+            ,zsbh.value_number as bh_type_z_id
+            
+            ,ic.xitor_id as link_id
+            ,ls.value_number as link_status_id
+            ,ic.xitor_class_id as link_type_id
+            ,fi.parent_id as fiber_ring_id
+        from 
+            xitor ic
+			join v_xitor_class on (v_xitor_class.xitor_type_id = ic.xitor_type_id)
+			
+            join config_value_number ls on (ls.key_value = ic.xitor_id and ls.config_field_id = c_bh_status_cf /*BH_STATUS - BackHaul*/)
+			join attrib_v_table_value ls_value on (ls_value.attrib_v_table_value_id = ls.value_number) 
+			
+            left outer join config_value_number desig on (desig.key_value = ic.xitor_id and desig.config_field_id = c_bh_designation_cf /*BH_DESIGNATION - BackHaul*/)
+            join config_value_number ac on (ac.key_value = ic.xitor_id and ac.config_field_id = c_a_cand_cf /*A-CAND Repl*/)
+            join config_value_number acprim on (acprim.key_value = ac.value_number and acprim.config_field_id = c_cand_rank_cf/*CAND_RANK - Candidate*/)
+			join attrib_v_table_value a_cand_rank_value on (a_cand_rank_value.attrib_v_table_value_id = acprim.value_number) 
+			
+			join relation_type rt_site_cand on (rt_site_cand.child_type_id = c_candidate_tt and rt_site_cand.parent_type_id = c_site_tt) /*Site-&gt;Cand*/
+			
+            join relation acrel on (acrel.child_id = ac.value_number and acrel.relation_type_id = rt_site_cand.relation_type_id/*Site-&gt;Cand Repl*/)
+			
+            join config_value_number asstatus on (asstatus.key_value = acrel.parent_id and asstatus.config_field_id = c_xitor_flag_cf /*XITOR_FLAG - Site*/)
+			join attrib_v_table_value a_status_value on (a_status_value.attrib_v_table_value_id = asstatus.value_number) 
+			
+            join config_value_number aspop on (aspop.key_value = acrel.parent_id and aspop.config_field_id = c_site_type_pop_cf/*SITE_TYPE_POP - Site*/)
+			join attrib_v_table_value a_type_pop_value on (a_type_pop_value.attrib_v_table_value_id = aspop.value_number)			
+			
+            join config_value_number asbh on (asbh.key_value = acrel.parent_id and asbh.config_field_id = c_site_type_bh_cf /*SITE_TYPE_BH - Site*/)
+			join attrib_v_table_value a_type_bh_value on (a_type_bh_value.attrib_v_table_value_id = asbh.value_number)			
+			
+            join config_value_number zc on (zc.key_value = ic.xitor_id and zc.config_field_id = c_z_cand_cf /*Z-CAND Repl*/)
+            join config_value_number zcprim on (zcprim.key_value = zc.value_number and zcprim.config_field_id = c_cand_rank_cf/*CAND_RANK - Candidate*/)
+			join attrib_v_table_value z_cand_rank_value on (z_cand_rank_value.attrib_v_table_value_id = zcprim.value_number) 
+			
+            join relation zcrel on (zcrel.child_id = zc.value_number and zcrel.relation_type_id = rt_site_cand.relation_type_id/*Site-&gt;Cand Repl*/)
+            join config_value_number zsstatus on (zsstatus.key_value = zcrel.parent_id and zsstatus.config_field_id = c_xitor_flag_cf /*XITOR_FLAG - Site*/)
+			join attrib_v_table_value z_status_value on (z_status_value.attrib_v_table_value_id = zsstatus.value_number) 
+			
+            join config_value_number zspop on (zspop.key_value = zcrel.parent_id and zspop.config_field_id = c_site_type_pop_cf/*SITE_TYPE_POP - Site*/)
+			join attrib_v_table_value z_type_pop_value on (z_type_pop_value.attrib_v_table_value_id = zspop.value_number)			
+			
+            join config_value_number zsbh on (zsbh.key_value = zcrel.parent_id and zsbh.config_field_id = c_site_type_bh_cf /*SITE_TYPE_BH - Site*/)
+			join attrib_v_table_value z_type_bh_value on (z_type_bh_value.attrib_v_table_value_id = zsbh.value_number)	
+			
+            left outer join (
+            select relation.parent_id, relation.child_id
+            from relation 
+            join relation_type rt on (rt.child_type_id = c_backhaul_tt and rt.parent_type_id = c_fiberring_tt and rt.relation_type_id = relation.relation_type_id /*FIBER_RING--&gt;BackHaul*/)            
+            ) fi on fi.child_id = ic.xitor_id
+        where
+            ic.xitor_type_id = c_backhaul_tt/*BackHaul*/
+            and v_xitor_class.class_name in (&apos;Telco&apos;,&apos;MW-Licensed&apos;,&apos;MW-Unlicensed&apos;,&apos;ClearPath&apos;,&apos;Fiber Link&apos;,&apos;Leased Ethernet&apos;)
+            and ls_value.value in (&apos;Build&apos;, &apos;On-Air&apos;, &apos;Plan&apos;, &apos;On-Air Backup&apos;, &apos;Temp Off-Line&apos;, &apos;On-Hold&apos;) 
+			
+            and a_cand_rank_value.value in (&apos;Primary&apos;) 
+			and z_cand_rank_value.value in (&apos;Primary&apos;)
+			
+			and a_status_value.value &lt;&gt; (&apos;Cancelled&apos;) 
+			and z_status_value.value &lt;&gt; (&apos;Cancelled&apos;) 
+			
+			and a_type_pop_value.value in (&apos;MSC&apos;, &apos;No POP&apos;, &apos;CORE&apos;) 
+			and z_type_pop_value.value in (&apos;MSC&apos;, &apos;No POP&apos;, &apos;CORE&apos;) 
+			
+			and a_type_bh_value.value in (&apos;Transport Ring&apos;, &apos;MW Donor&apos;, &apos;Spur Site&apos;, &apos;DF Transport Site&apos;, &apos;DF MW Donor&apos;, &apos;LIT MW Donor&apos;, &apos;LIT Transport Site&apos;, &apos;MW Necklace&apos;, &apos;No Backhaul&apos;) 
+			and z_type_bh_value.value in (&apos;Transport Ring&apos;, &apos;MW Donor&apos;, &apos;Spur Site&apos;, &apos;DF Transport Site&apos;, &apos;DF MW Donor&apos;, &apos;LIT MW Donor&apos;, &apos;LIT Transport Site&apos;, &apos;MW Necklace&apos;, &apos;No Backhaul&apos;) 
+			
+			and not (a_type_pop_value.value in (&apos;MSC&apos;, &apos;CORE&apos;) and z_type_pop_value.value in (&apos;MSC&apos;, &apos;CORE&apos;))
+            and ac.value_number &lt;&gt; zc.value_number
+            and (
+                (select count(column_value) from table(p_link_status_ids) where column_value is not null) = 0
+                or 
+                ((select count(column_value) from table(p_link_status_ids) where column_value is not null) &gt;= 1 and ls.value_number in (select column_value from table(p_link_status_ids)))
+            )
+            and (
+                (select count(column_value) from table(p_link_type_ids) where column_value is not null) = 0
+                or 
+                ((select count(column_value) from table(p_link_type_ids) where column_value is not null) &gt;= 1 and ic.xitor_class_id in (select column_value from table(p_link_type_ids)))
+            )
+            and (
+                (select count(column_value) from table(p_ic_desig_ids) where column_value is not null) = 0
+                or 
+                ((select count(column_value) from table(p_ic_desig_ids) where column_value is not null) &gt;= 1 
+                 and (desig.value_number in (select column_value from table(p_ic_desig_ids)) or desig.value_number is null))
+            )
+            and (
+                (
+                    (select count(column_value) from table(p_fiber_ring_ids) where column_value is not null) = 0 
+                    or (a_type_pop_value.value &lt;&gt; (&apos;No POP&apos;) and z_type_pop_value.value = (&apos;No POP&apos;)) 
+                    or (a_type_pop_value.value = (&apos;No POP&apos;) and z_type_pop_value.value &lt;&gt; (&apos;No POP&apos;)))
+                or 
+                (
+                    (select count(column_value) from table(p_fiber_ring_ids) where column_value is not null) &gt;= 1 
+                    and fi.parent_id in (select column_value from table(p_fiber_ring_ids))
+                    and (a_type_pop_value.value = (&apos;No POP&apos;) and z_type_pop_value.value = (&apos;No POP&apos;))
+                )
+            );
+        /*Duplicate relations but transpose SiteA and SiteZ columns*/
+        insert into fring_data (
+            report_run_id
+            ,site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+            ,fiber_ring_id
+        ) select 
+            report_run_id
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+            ,fiber_ring_id
+        from fring_data
+        where report_run_id = p_rep_run_id;
+        commit;
+        
+        select count(report_run_id) into v_cnt
+        from fring_data where report_run_id = p_rep_run_id;
+        
+        if v_cnt = 0 then
+            util.RaiseError(&apos;There is no source data for report&apos;);
+        end if;
+        
+    end fill_source_data;
+    procedure clear_source_data(p_rep_run_id number) as
+        pragma autonomous_transaction;
+    begin
+        delete from fring_data where report_run_id = p_rep_run_id;
+        delete from fring_site where report_run_id = p_rep_run_id;
+        delete from fring_link where report_run_id = p_rep_run_id;
+        commit;
+    end clear_source_data;
+    
+    function get_admin_params_begin(p_rep_run_id number, p_fiber_ring_ids tableofnum, p_link_status_ids tableofnum, p_link_type_ids tableofnum, p_ic_desig_ids tableofnum) return list_sprint_clrpath_admin pipelined as
+    begin
+        fill_source_data(p_rep_run_id, p_fiber_ring_ids, p_link_status_ids, p_link_type_ids, p_ic_desig_ids);
+        pipe row (new t_sprint_clrpath_admin(
+            &apos;FILL_SOURCE_DATA&apos;,
+            &apos;FILL_SOURCE_DATA&apos;
+        ));
+    end get_admin_params_begin;
+    function get_admin_params_end(p_rep_run_id number) return list_sprint_clrpath_admin pipelined as
+    begin
+        clear_source_data(p_rep_run_id);
+        pipe row (new t_sprint_clrpath_admin(
+            &apos;CREATION_DATE&apos;,
+            to_char(sysdate,&apos;MM/DD/YYYY&apos;)
+        ));
+        pipe row (new t_sprint_clrpath_admin(
+            &apos;SERVER&apos;,
+            c_server
+        ));
+    end get_admin_params_end;
+    
+    function get_sites2(p_rep_run_id number, p_pop_ids tableofnum) return list_fring_site pipelined as
+        v_cur_site number;
+        v_cur_site_stack tableofnum := new tableofnum();
+        v_glob_site_stack tableofnum := new tableofnum(); 
+        v_glob_site_lvl_stack tableofnum := new tableofnum();
+        v_count number;
+        v_fring_site t_fring_site;
+        v_cand_id number;
+    begin
+        select count(report_run_id) into v_count
+        from fring_site where report_run_id = p_rep_run_id;
+        
+        if v_count = 0 then
+            for rec in (
+                select distinct p.column_value as pop_site_id, d.cand_a_id 
+                from table(p_pop_ids) p 
+                    join fring_data d on (d.site_a_id = p.column_value) 
+                where d.report_run_id = p_rep_run_id
+            ) loop
+                begin
+                    select count(site_id) into v_count
+                    from fring_site where core_id = rec.pop_site_id and report_run_id = p_rep_run_id;
+                exception
+                    when no_data_found then
+                        v_count := 0;
+                end;
+                if v_count = 0 then
+                    v_fring_site := new t_fring_site(
+                        rec.pop_site_id,
+                        rec.cand_a_id,
+                        rec.pop_site_id
+                    );
+                    add_site(p_rep_run_id, v_fring_site);
+                    --pipe row (v_fring_site);
+                end if;
+                v_cur_site := rec.pop_site_id;
+    
+                while v_cur_site is not null
+                loop
+                    select ref_site bulk collect into v_cur_site_stack
+                    from (
+                        select distinct site_z_id as ref_site 
+						from fring_data t 
+						join attrib_v_table_value type_pop_value on (type_pop_value.attrib_v_table_value_id = t.pop_type_a_id) 
+                        where 
+                            t.report_run_id = p_rep_run_id 
+                            and t.site_a_id = v_cur_site 
+                            and ((type_pop_value.value &lt;&gt; &apos;No POP&apos; and t.site_a_id = rec.pop_site_id) or (type_pop_value.value = &apos;No POP&apos;))
+                            and t.site_z_id not in (select site_id from fring_site where report_run_id = p_rep_run_id and core_id = rec.pop_site_id)
+                    );
+                    if v_cur_site_stack.count &gt; 0 then
+                        for idx in v_cur_site_stack.first..v_cur_site_stack.last
+                        loop
+                            select cand_a_id into v_cand_id 
+                            from fring_data 
+                            where report_run_id = p_rep_run_id and site_a_id = v_cur_site_stack(idx) and rownum = 1;
+                            
+                            v_fring_site := new t_fring_site(
+                                v_cur_site_stack(idx),
+                                v_cand_id,
+                                rec.pop_site_id
+                            );
+                            add_site(p_rep_run_id, v_fring_site);
+                            v_glob_site_stack.extend;
+                            v_glob_site_stack(v_glob_site_stack.last) := v_cur_site_stack(idx);
+                        end loop;
+                    end if;
+        
+                    if v_glob_site_stack.count &gt; 0 then
+                        v_cur_site := v_glob_site_stack(v_glob_site_stack.first);
+                        v_glob_site_stack.delete(v_glob_site_stack.first);
+                    else 
+                        v_cur_site := null;
+                    end if;
+                end loop;
+            end loop;
+        end if;
+        for rec in (select site_id, cand_id, core_id from fring_site where report_run_id = p_rep_run_id)
+        loop
+             pipe row (new t_fring_site(
+                rec.site_id,
+                rec.cand_id,
+                rec.core_id
+            ));
+        end loop;
+    end get_sites2;
+    function get_links(p_rep_run_id number, p_pop_ids tableofnum) return list_fring_link pipelined as
+        v_cnt number;
+        v_fring_link t_fring_link;
+    begin
+        select count(link_id) into v_cnt
+        from fring_link where report_run_id = p_rep_run_id;
+        if v_cnt &gt; 0 then
+            for rec in (select link_id, site_a_id, site_z_id, fiber_ring_id from fring_link where report_run_id = p_rep_run_id)
+            loop
+                 pipe row (new t_fring_link(
+                    rec.link_id,
+                    rec.site_a_id,
+                    rec.site_z_id,
+                    rec.fiber_ring_id
+                ));
+            end loop;
+        else 
+            select count(report_run_id) into v_cnt
+            from fring_data where report_run_id = p_rep_run_id;
+    
+            if v_cnt = 0 then
+                clear_source_data(p_rep_run_id);
+                util.RaiseError(&apos;There is no source data for report&apos;);
+            end if;
+            for rec in (
+                select
+                    d.link_id
+                    ,d.site_a_id
+                    ,d.site_z_id
+                    ,fi.parent_id as fiber_ring_id
+                from
+                    (select * from (select z.*, row_number() over (partition by link_id order by link_id) as rn from fring_data z where z.report_run_id = p_rep_run_id) where rn = 1) d 
+                    join fring_site ap on (ap.site_id = d.site_a_id)
+                    join fring_site zp on (zp.site_id = d.site_z_id)
+                    join config_value_number ac on (ac.key_value = d.link_id and ac.config_field_id = c_a_cand_cf /*A-CAND Repl*/)
+					join relation_type rt_site_cand on (rt_site_cand.child_type_id = c_candidate_tt and rt_site_cand.parent_type_id = c_site_tt) /*Site-&gt;Cand*/
+                    join relation acrel on (acrel.child_id = ac.value_number and acrel.relation_type_id = rt_site_cand.relation_type_id/*Site-&gt;Cand Repl*/)
+                    join config_value_number zc on (zc.key_value = d.link_id and zc.config_field_id = c_z_cand_cf /*Z-CAND Repl*/)
+                    join relation zcrel on (zcrel.child_id = zc.value_number and zcrel.relation_type_id = rt_site_cand.relation_type_id/*Site-&gt;Cand Repl*/)
+                                       
+                    left outer join (
+                    select relation.parent_id, relation.child_id
+                    from relation 
+                    join relation_type rt on (rt.child_type_id = c_backhaul_tt and rt.parent_type_id = c_fiberring_tt and rt.relation_type_id = relation.relation_type_id /*FiberRing-&gt;BackHaul*/)            
+                    ) fi on fi.child_id = d.link_id
+                where 
+                    ap.report_run_id = d.report_run_id
+                    and ap.report_run_id = p_rep_run_id
+                    and d.report_run_id = p_rep_run_id
+                    and zp.report_run_id = p_rep_run_id
+                    and ap.site_id &lt;&gt; zp.site_id
+                    and not exists (select link_id from fring_link where report_run_id = p_rep_run_id and link_id = d.link_id)
+            ) loop
+                v_fring_link := new t_fring_link(
+                    rec.link_id,
+                    rec.site_a_id,
+                    rec.site_z_id,
+                    rec.fiber_ring_id
+                );
+                add_link(p_rep_run_id, v_fring_link);
+                pipe row (v_fring_link);
+            end loop;
+        end if;
+    end get_links;
+    
+    function add_to_tableofnum(p_table tableofnum, p_id number) 
+    return tableofnum as
+        v_new_list tableofnum;
+    begin
+        if p_table is null then
+            return new tableofnum();
+        end if;
+        select * bulk collect into v_new_list from table(p_table);
+        v_new_list.extend;
+        v_new_list(v_new_list.last) := p_id;
+        return v_new_list;
+    end add_to_tableofnum;
+    procedure fill_source_param_data as
+        pragma autonomous_transaction;
+    begin
+        delete from fring_param_data;
+        --==    FILL TABLE WITH SOURCE DATA    ==--
+        insert into fring_param_data (
+            site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+            ,fiber_ring_id
+        ) 
+        select 
+            acrel.parent_id as site_a_id
+            ,ac.value_number as cand_a_id
+            ,aspop.value_number as pop_type_a_id
+            ,asbh.value_number as bh_type_a_id
+            
+            ,zcrel.parent_id as site_z_id
+            ,zc.value_number as cand_z_id
+            ,zspop.value_number as pop_type_z_id
+            ,zsbh.value_number as bh_type_z_id
+            
+            ,ic.xitor_id as link_id
+            ,ls.value_number as link_status_id
+            ,ic.xitor_class_id as link_type_id
+            ,fi.parent_id as fiber_ring_id
+        from 
+            xitor ic
+			join v_xitor_class on (v_xitor_class.xitor_type_id = ic.xitor_type_id)
+            join config_value_number ls on (ls.key_value = ic.xitor_id and ls.config_field_id = c_bh_status_cf /*BH_STATUS - BackHaul*/)
+			join attrib_v_table_value ls_value on (ls_value.attrib_v_table_value_id = ls.value_number) 
+			
+            join config_value_number ac on (ac.key_value = ic.xitor_id and ac.config_field_id = c_a_cand_cf /*A-CAND Repl*/)
+            join config_value_number acprim on (acprim.key_value = ac.value_number and acprim.config_field_id = c_cand_rank_cf/*CAND_RANK - Candidate*/)
+			join attrib_v_table_value a_cand_rank_value on (a_cand_rank_value.attrib_v_table_value_id = acprim.value_number) 
+			
+			join relation_type rt_site_cand on (rt_site_cand.child_type_id = c_candidate_tt and rt_site_cand.parent_type_id = c_site_tt) /*Site-&gt;Cand*/
+            join relation acrel on (acrel.child_id = ac.value_number and acrel.relation_type_id = rt_site_cand.relation_type_id/*Site-&gt;Cand Repl*/)
+            join config_value_number asstatus on (asstatus.key_value = acrel.parent_id and asstatus.config_field_id = c_xitor_flag_cf /*XITOR_FLAG - Site*/)
+			join attrib_v_table_value a_status_value on (a_status_value.attrib_v_table_value_id = asstatus.value_number) 
+			
+            join config_value_number aspop on (aspop.key_value = acrel.parent_id and aspop.config_field_id = c_site_type_pop_cf/*SITE_TYPE_POP - Site*/)
+			join attrib_v_table_value a_type_pop_value on (a_type_pop_value.attrib_v_table_value_id = aspop.value_number)			
+			
+            join config_value_number asbh on (asbh.key_value = acrel.parent_id and asbh.config_field_id = c_site_type_bh_cf /*SITE_TYPE_BH - Site*/)
+			join attrib_v_table_value a_type_bh_value on (a_type_bh_value.attrib_v_table_value_id = asbh.value_number)			
+			
+            join config_value_number zc on (zc.key_value = ic.xitor_id and zc.config_field_id = c_z_cand_cf /*Z-CAND Repl*/)
+            join config_value_number zcprim on (zcprim.key_value = zc.value_number and zcprim.config_field_id = c_cand_rank_cf/*CAND_RANK - Candidate*/)
+			join attrib_v_table_value z_cand_rank_value on (z_cand_rank_value.attrib_v_table_value_id = zcprim.value_number) 
+			
+            join relation zcrel on (zcrel.child_id = zc.value_number and zcrel.relation_type_id = rt_site_cand.relation_type_id/*Site-&gt;Cand Repl*/)
+            join config_value_number zsstatus on (zsstatus.key_value = zcrel.parent_id and zsstatus.config_field_id = c_xitor_flag_cf /*XITOR_FLAG - Site*/)
+			join attrib_v_table_value z_status_value on (z_status_value.attrib_v_table_value_id = zsstatus.value_number) 
+			
+            join config_value_number zspop on (zspop.key_value = zcrel.parent_id and zspop.config_field_id = c_site_type_pop_cf/*SITE_TYPE_POP - Site*/)
+			join attrib_v_table_value z_type_pop_value on (z_type_pop_value.attrib_v_table_value_id = zspop.value_number)			
+			
+            join config_value_number zsbh on (zsbh.key_value = zcrel.parent_id and zsbh.config_field_id = c_site_type_bh_cf /*SITE_TYPE_BH - Site*/)
+			join attrib_v_table_value z_type_bh_value on (z_type_bh_value.attrib_v_table_value_id = zsbh.value_number)
+                        
+            left outer join (
+            select relation.parent_id, relation.child_id
+            from relation 
+            join relation_type rt on (rt.child_type_id = c_backhaul_tt and rt.parent_type_id = c_fiberring_tt and rt.relation_type_id = relation.relation_type_id /*FIBER_RING--&gt;BackHaul*/)            
+            ) fi on fi.child_id = ic.xitor_id
+        where
+            ic.xitor_type_id = c_backhaul_tt /*BackHaul*/
+			and v_xitor_class.class_name in (&apos;Telco&apos;,&apos;MW-Licensed&apos;,&apos;MW-Unlicensed&apos;,&apos;ClearPath&apos;,&apos;Fiber Link&apos;,&apos;Leased Ethernet&apos;)
+			
+            and ls_value.value in (&apos;Build&apos;, &apos;On-Air&apos;, &apos;Plan&apos;, &apos;On-Air Backup&apos;, &apos;Temp Off-Line&apos;, &apos;On-Hold&apos;) 
+			
+            and a_cand_rank_value.value in (&apos;Primary&apos;) 
+			and z_cand_rank_value.value in (&apos;Primary&apos;)
+			
+			and a_status_value.value &lt;&gt; (&apos;Cancelled&apos;) 
+			and z_status_value.value &lt;&gt; (&apos;Cancelled&apos;) 
+			
+			and a_type_pop_value.value in (&apos;MSC&apos;, &apos;No POP&apos;, &apos;CORE&apos;) 
+			and z_type_pop_value.value in (&apos;MSC&apos;, &apos;No POP&apos;, &apos;CORE&apos;) 
+			
+			and a_type_bh_value.value in (&apos;Transport Ring&apos;, &apos;MW Donor&apos;, &apos;Spur Site&apos;, &apos;DF Transport Site&apos;, &apos;DF MW Donor&apos;, &apos;LIT MW Donor&apos;, &apos;LIT Transport Site&apos;, &apos;MW Necklace&apos;, &apos;No Backhaul&apos;) 
+			and z_type_bh_value.value in (&apos;Transport Ring&apos;, &apos;MW Donor&apos;, &apos;Spur Site&apos;, &apos;DF Transport Site&apos;, &apos;DF MW Donor&apos;, &apos;LIT MW Donor&apos;, &apos;LIT Transport Site&apos;, &apos;MW Necklace&apos;, &apos;No Backhaul&apos;) 
+						
+			and not (a_type_pop_value.value in (&apos;MSC&apos;, &apos;CORE&apos;) and z_type_pop_value.value in (&apos;MSC&apos;, &apos;CORE&apos;))
+            and ac.value_number &lt;&gt; zc.value_number;
+        
+        insert into fring_param_data (
+            site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            
+            ,site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+            ,fiber_ring_id
+        ) select 
+            site_z_id
+            ,cand_z_id
+            ,pop_type_z_id
+            ,bh_type_z_id
+            
+            ,site_a_id
+            ,cand_a_id
+            ,pop_type_a_id
+            ,bh_type_a_id
+            ,link_id
+            ,link_status_id
+            ,link_type_id
+            ,fiber_ring_id
+        from fring_param_data;
+        commit;
+    end fill_source_param_data;
+    procedure fill_param_site(p_pop_ids tableofnum) as
+        v_cur_site number;
+        v_cur_site_stack tableofnum := new tableofnum();
+        v_glob_site_stack tableofnum := new tableofnum(); 
+        v_glob_site_lvl_stack tableofnum := new tableofnum();
+        v_count number;
+        v_fring_site t_fring_site;
+        v_cand_id number;
+        pragma autonomous_transaction;
+    begin
+        delete from fring_param_site;
+        --==    GET ALL SITES CONNECTED TO SELECTED MSC/COREs    ==--
+        for rec in (select distinct p.column_value as pop_site_id, d.cand_a_id from table(p_pop_ids) p join fring_param_data d on (d.site_a_id = p.column_value))
+        loop
+            v_cur_site := rec.pop_site_id;
+            while v_cur_site is not null
+            loop
+                select ref_site bulk collect into v_cur_site_stack
+                from (
+                    select distinct site_z_id as ref_site from fring_param_data 
+                    where 
+                        site_a_id = v_cur_site 
+                        and site_z_id not in (select site_id from fring_param_site)
+                );
+                if v_cur_site_stack.count &gt; 0 then
+                    for idx in v_cur_site_stack.first..v_cur_site_stack.last
+                    loop
+                        select cand_a_id into v_cand_id 
+                        from fring_param_data 
+                        where site_a_id = v_cur_site_stack(idx) and rownum = 1;
+                        insert into fring_param_site (
+                            site_id 
+                            ,cand_id 
+                            ,core_id
+                        ) values (
+                            v_cur_site_stack(idx)
+                            ,v_cand_id
+                            ,rec.pop_site_id
+                        );
+                        v_glob_site_stack.extend;
+                        v_glob_site_stack(v_glob_site_stack.last) := v_cur_site_stack(idx);
+                    end loop;
+                end if;
+    
+                if v_glob_site_stack.count &gt; 0 then
+                    v_cur_site := v_glob_site_stack(v_glob_site_stack.first);
+                    v_glob_site_stack.delete(v_glob_site_stack.first);
+                else 
+                    v_cur_site := null;
+                end if;
+            end loop;
+        end loop;
+        commit;
+    end fill_param_site;
+    
+    function get_fiber_rings(p_pop_ids tableofnum) 
+    return tableofnum pipelined as
+    begin
+        fill_source_param_data;
+        fill_param_site(p_pop_ids);
+        --==    GET ALL FIBER RINGS    ==--
+        for rec in (
+            select distinct
+                fi.parent_id as fiber_ring_id
+            from
+                (select * from (select z.*, row_number() over (partition by link_id order by link_id) as rn from fring_param_data z) where rn = 1) d 
+                join fring_param_site ap on (ap.site_id = d.site_a_id)
+                join fring_param_site zp on (zp.site_id = d.site_z_id)
+                join relation_type rt_site_cand on (rt_site_cand.child_type_id = c_candidate_tt and rt_site_cand.parent_type_id = c_site_tt) /*Site-&gt;Cand*/
+                join config_value_number ac on (ac.key_value = d.link_id and ac.config_field_id = c_a_cand_cf /*A-CAND Repl*/)
+                join relation acrel on (acrel.child_id = ac.value_number and acrel.relation_type_id = rt_site_cand.relation_type_id/*Site-&gt;Cand Repl*/)
+                join config_value_number zc on (zc.key_value = d.link_id and zc.config_field_id = c_z_cand_cf /*Z-CAND Repl*/)
+                join relation zcrel on (zcrel.child_id = zc.value_number and zcrel.relation_type_id = rt_site_cand.relation_type_id/*Site-&gt;Cand Repl*/)
+                
+                left outer join (
+                select relation.parent_id, relation.child_id
+                from relation 
+                join relation_type rt on (rt.child_type_id = c_backhaul_tt and rt.parent_type_id = c_fiberring_tt and rt.relation_type_id = relation.relation_type_id /*FIBER_RING--&gt;BackHaul*/)            
+                ) fi on fi.child_id = d.link_id
+            where 
+                ap.site_id &lt;&gt; zp.site_id
+                and fi.parent_id is not null
+        ) loop
+            pipe row (rec.fiber_ring_id);
+        end loop;
+    end get_fiber_rings;
+    
+    function get_augments(p_rep_run_id number, p_pop_ids tableofnum, p_aug_type_ids tableofnum) return list_fring_aug pipelined as
+    begin
+        for rec in (
+            select
+                s.core_id as root_id
+                ,s.site_id
+                ,aug.xitor_id as augment_id
+            from 
+                (
+                    select site_id, cand_id, core_id from table(get_sites2(p_rep_run_id, p_pop_ids))
+                ) s
+                join relation ca on (ca.parent_id = s.cand_id)
+                join xitor aug on (aug.xitor_id = ca.child_id)
+				join v_xitor_class on (v_xitor_class.xitor_type_id = aug.xitor_type_id)
+                join relation_type rt on (rt.child_type_id = c_job_tt and rt.parent_type_id = c_candidate_tt) /*Candidates -&gt; Job Repl*/
+            where
+                ca.relation_type_id = rt.relation_type_id /*Candidates -&gt; Job Repl*/
+                and (
+                    (
+                        (select count(column_value) from table(p_aug_type_ids) where column_value is not null) = 0 
+                        /* MW-* Trackor Classes (By Default) Repl*/
+						and v_xitor_class.class_name in (&apos;MW Antenna Change-WM&apos;, &apos;MW T-1 Mitigation&apos;, &apos;MW T-1 Mitigation-WM&apos;, &apos;MW-Antenna Change&apos;, &apos;MW-Audit Only&apos;, &apos;MW-Backhaul Sharing&apos;, &apos;MW-Bandwidth Utilization&apos;, &apos;MW-License Key Upgrade&apos;, &apos;MW-License Key Upgrade-WM&apos;, &apos;MW-Link Change&apos;, &apos;MW-Link Change-WM&apos;, &apos;MW-LOS Survey&apos;, &apos;MW-Modem Change&apos;, &apos;MW-Modem Change-WM&apos;, &apos;MW-New Link&apos;, &apos;MW-New Link-MVNO&apos;, &apos;MW-New Link-WM&apos;, &apos;MW-PCN License Change&apos;, &apos;MW-Radio Change&apos;, &apos;MW-RBH Demarcation&apos;, &apos;MW-Radio Change-WM&apos;, &apos;MW-Sweepback&apos;, &apos;MW-Traffic Rebalancing&apos;, &apos;MW-Transport Upgrade&apos;) 
+                    )
+                    or 
+                    (
+                        (select count(column_value) from table(p_aug_type_ids) where column_value is not null) &gt; 0 
+                        and aug.xitor_class_id in (select column_value from table(p_aug_type_ids))
+                    )
+                )
+        ) loop
+            pipe row (new t_fring_aug(rec.root_id, rec.site_id, rec.augment_id));
+        end loop;
+    end get_augments;
+end pkgr_fiber_ring_test;</DB_PACKAGE_BODY>
+  <DB_PACKAGE_ID>10075380</DB_PACKAGE_ID>
+  <PROGRAM_ID>1000993682</PROGRAM_ID>
+  <BPD_ITEMS/>
+  <COMPONENT_PACKAGES>
+   <T_BPL_COMP_PKG>
+    <COMPONENT_ID>27</COMPONENT_ID>
+    <OBJECT_ID>10075380</OBJECT_ID>
+    <COMPONENTS_PACKAGE_ID>217536</COMPONENTS_PACKAGE_ID>
+    <NAME>VHMGR Graph Reporter</NAME>
+    <PROGRAM_ID>1000993682</PROGRAM_ID>
+    <BPD_ITEMS/>
+    <IS_LOCKED>0</IS_LOCKED>
+   </T_BPL_COMP_PKG>
+  </COMPONENT_PACKAGES>
+  <COMPONENT_LABELS/>
+ </DB_PACKAGES_ITEM>
+</DB_PACKAGES>
+</COMPONENTS>
